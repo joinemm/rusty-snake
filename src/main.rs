@@ -1,10 +1,10 @@
+use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 use bevy::render::pass::ClearColor;
-use bevy::{core::FixedTimestep, transform};
 use rand::prelude::random;
 use std::f64::consts::PI;
 
-const ARENA_WIDTH: u32 = 24;
+const ARENA_WIDTH: u32 = 16;
 const ARENA_HEIGHT: u32 = 16;
 const BACKGROUND_COLOR: &str = "5e81ac";
 const SNAKE_COLOR: &str = "a3be8c";
@@ -59,6 +59,9 @@ struct SnakeSegments(Vec<Entity>);
 #[derive(Default)]
 struct LastTailPosition(Option<Position>);
 
+#[derive(Default)]
+struct Score(u32);
+
 #[derive(SystemLabel, Debug, Hash, PartialEq, Eq, Clone)]
 pub enum SnakeMovement {
     Input,
@@ -70,8 +73,13 @@ pub enum SnakeMovement {
 struct Food;
 
 struct GrowthEvent;
+
 struct DeathEvent;
+
 struct FoodSpawnEvent;
+
+struct ScoreText;
+
 struct Materials {
     head_material: Handle<ColorMaterial>,
     segment_material: Handle<ColorMaterial>,
@@ -82,7 +90,7 @@ fn main() {
     App::build()
         .insert_resource(WindowDescriptor {
             title: "Snake!".to_string(),
-            width: 750.0,
+            width: 500.0,
             height: 500.0,
             resizable: false,
             ..Default::default()
@@ -90,6 +98,7 @@ fn main() {
         .insert_resource(ClearColor(Color::hex(BACKGROUND_COLOR).unwrap()))
         .insert_resource(SnakeSegments::default())
         .insert_resource(LastTailPosition::default())
+        .insert_resource(Score::default())
         .add_startup_system(setup.system())
         .add_startup_stage(
             "game_setup",
@@ -105,6 +114,7 @@ fn main() {
         )
         .add_system(game_over.system().after(SnakeMovement::Movement))
         .add_system(food_event_reader.system().after(SnakeMovement::Eating))
+        .add_system(update_score_text.system().after(SnakeMovement::Growth))
         .add_system_set(
             SystemSet::new()
                 .with_run_criteria(FixedTimestep::step(0.2))
@@ -141,13 +151,43 @@ fn setup(
     asset_server: Res<AssetServer>,
 ) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    commands.spawn_bundle(UiCameraBundle::default());
     let gem_handle = asset_server.load("images/cookie.png");
     let head_handle = asset_server.load("images/head.png");
     commands.insert_resource(Materials {
         head_material: materials.add(head_handle.into()),
         segment_material: materials.add(Color::hex(SNAKE_COLOR).unwrap().into()),
         food_material: materials.add(gem_handle.into()),
-    })
+    });
+    let font = asset_server.load("fonts/arcade.ttf");
+    commands
+        .spawn_bundle(TextBundle {
+            style: Style {
+                align_self: AlignSelf::FlexEnd,
+                position_type: PositionType::Absolute,
+                position: Rect {
+                    top: Val::Px(10.0),
+                    left: Val::Px(10.0),
+                    ..Default::default()
+                },
+                ..Default::default()
+            },
+            // Use the `Text::with_section` constructor
+            text: Text::with_section(
+                "0",
+                TextStyle {
+                    font,
+                    font_size: 32.0,
+                    color: Color::WHITE,
+                },
+                TextAlignment {
+                    horizontal: HorizontalAlign::Center,
+                    ..Default::default()
+                },
+            ),
+            ..Default::default()
+        })
+        .insert(ScoreText);
 }
 
 fn spawn_snake(
@@ -275,6 +315,8 @@ fn game_over(
     food: Query<Entity, With<Food>>,
     segments: Query<Entity, With<SnakeSegment>>,
     mut food_spawner: EventWriter<FoodSpawnEvent>,
+    mut score: ResMut<Score>,
+    mut text_query: Query<&mut Text, With<ScoreText>>,
 ) {
     if reader.iter().next().is_some() {
         for ent in food.iter().chain(segments.iter()) {
@@ -282,6 +324,10 @@ fn game_over(
         }
         spawn_snake(commands, materials, segments_res);
         food_spawner.send(FoodSpawnEvent);
+        score.0 = 0;
+        for mut text in text_query.iter_mut() {
+            text.sections[0].value = format!("{}", score.0)
+        }
     }
 }
 
@@ -308,6 +354,7 @@ fn snake_growth(
     last_tail_position: Res<LastTailPosition>,
     mut segments: ResMut<SnakeSegments>,
     mut growth_reader: EventReader<GrowthEvent>,
+    mut score: ResMut<Score>,
     materials: Res<Materials>,
 ) {
     if growth_reader.iter().next().is_some() {
@@ -316,6 +363,7 @@ fn snake_growth(
             &materials.segment_material,
             last_tail_position.0.unwrap(),
         ));
+        score.0 += 1;
     }
 }
 
@@ -358,6 +406,18 @@ fn food_spawner(
         .insert(Food)
         .insert(get_empty_pos(blockers.iter().collect()))
         .insert(Size::square(1.0));
+}
+
+fn update_score_text(
+    mut query: Query<&mut Text, With<ScoreText>>,
+    score: Res<Score>,
+    mut reader: EventReader<GrowthEvent>,
+) {
+    if reader.iter().next().is_some() {
+        for mut text in query.iter_mut() {
+            text.sections[0].value = format!("{}", score.0)
+        }
+    }
 }
 
 fn size_scaling(windows: Res<Windows>, mut q: Query<(&Size, &mut Sprite)>) {

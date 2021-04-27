@@ -3,8 +3,11 @@ use bevy::prelude::*;
 use bevy::render::pass::ClearColor;
 use rand::prelude::random;
 
-const ARENA_WIDTH: u32 = 16;
+const ARENA_WIDTH: u32 = 24;
 const ARENA_HEIGHT: u32 = 16;
+const BACKGROUND_COLOR: &str = "2e3440";
+const SNAKE_COLOR: &str = "a3be8c";
+const FOOD_COLOR: &str = "bf616a";
 
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 struct Position {
@@ -79,12 +82,12 @@ fn main() {
     App::build()
         .insert_resource(WindowDescriptor {
             title: "Snake!".to_string(),
-            width: 500.0,
+            width: 750.0,
             height: 500.0,
             resizable: false,
             ..Default::default()
         })
-        .insert_resource(ClearColor(Color::hex("8f6bac").unwrap()))
+        .insert_resource(ClearColor(Color::hex(BACKGROUND_COLOR).unwrap()))
         .insert_resource(SnakeSegments::default())
         .insert_resource(LastTailPosition::default())
         .add_startup_system(setup.system())
@@ -135,9 +138,9 @@ fn main() {
 fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
     commands.insert_resource(Materials {
-        head_material: materials.add(Color::hex("000").unwrap().into()),
-        segment_material: materials.add(Color::hex("111").unwrap().into()),
-        food_material: materials.add(Color::hex("f2a134").unwrap().into()),
+        head_material: materials.add(Color::hex(SNAKE_COLOR).unwrap().into()),
+        segment_material: materials.add(Color::hex(SNAKE_COLOR).unwrap().into()),
+        food_material: materials.add(Color::hex(FOOD_COLOR).unwrap().into()),
     })
 }
 

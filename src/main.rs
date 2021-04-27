@@ -1,13 +1,13 @@
-use bevy::core::FixedTimestep;
 use bevy::prelude::*;
 use bevy::render::pass::ClearColor;
+use bevy::{core::FixedTimestep, transform};
 use rand::prelude::random;
+use std::f64::consts::PI;
 
 const ARENA_WIDTH: u32 = 24;
 const ARENA_HEIGHT: u32 = 16;
-const BACKGROUND_COLOR: &str = "2e3440";
+const BACKGROUND_COLOR: &str = "5e81ac";
 const SNAKE_COLOR: &str = "a3be8c";
-const FOOD_COLOR: &str = "bf616a";
 
 #[derive(Default, Copy, Clone, Eq, PartialEq, Hash, Debug)]
 struct Position {
@@ -135,12 +135,18 @@ fn main() {
         .run();
 }
 
-fn setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
+fn setup(
+    mut commands: Commands,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    asset_server: Res<AssetServer>,
+) {
     commands.spawn_bundle(OrthographicCameraBundle::new_2d());
+    let gem_handle = asset_server.load("images/cookie.png");
+    let head_handle = asset_server.load("images/head.png");
     commands.insert_resource(Materials {
-        head_material: materials.add(Color::hex(SNAKE_COLOR).unwrap().into()),
+        head_material: materials.add(head_handle.into()),
         segment_material: materials.add(Color::hex(SNAKE_COLOR).unwrap().into()),
-        food_material: materials.add(Color::hex(FOOD_COLOR).unwrap().into()),
+        food_material: materials.add(gem_handle.into()),
     })
 }
 
@@ -153,7 +159,8 @@ fn spawn_snake(
         commands
             .spawn_bundle(SpriteBundle {
                 material: materials.head_material.clone(),
-                sprite: Sprite::new(Vec2::new(10.0, 10.0)),
+                sprite: Sprite::new(Vec2::new(16.0, 16.0)),
+                transform: Transform::default(),
                 ..Default::default()
             })
             .insert(SnakeHead {
@@ -162,7 +169,7 @@ fn spawn_snake(
             })
             .insert(SnakeSegment)
             .insert(Position { x: 3, y: 3 })
-            .insert(Size::square(0.8))
+            .insert(Size::square(1.0))
             .id(),
         spawn_segment(
             commands,
@@ -184,7 +191,7 @@ fn spawn_segment(
         })
         .insert(SnakeSegment)
         .insert(position)
-        .insert(Size::square(0.7))
+        .insert(Size::square(1.0))
         .id()
 }
 
@@ -209,12 +216,12 @@ fn snake_movement_input(keyboard_input: Res<Input<KeyCode>>, mut heads: Query<&m
 
 fn snake_movement(
     segments: ResMut<SnakeSegments>,
-    mut heads: Query<(Entity, &mut SnakeHead)>,
+    mut heads: Query<(Entity, &mut Transform, &mut SnakeHead)>,
     mut positions: Query<&mut Position>,
     mut last_tail_position: ResMut<LastTailPosition>,
     mut death_writer: EventWriter<DeathEvent>,
 ) {
-    if let Some((head_entity, mut head)) = heads.iter_mut().next() {
+    if let Some((head_entity, mut head_transform, mut head)) = heads.iter_mut().next() {
         let segment_positions = segments
             .0
             .iter()
@@ -225,15 +232,19 @@ fn snake_movement(
         match head.direction {
             Direction::Left => {
                 head_pos.x -= 1;
+                head_transform.rotation = Quat::from_rotation_z((PI / 2.0) as f32)
             }
             Direction::Right => {
                 head_pos.x += 1;
+                head_transform.rotation = Quat::from_rotation_z((PI * 1.5) as f32)
             }
             Direction::Up => {
                 head_pos.y += 1;
+                head_transform.rotation = Quat::from_rotation_z(0.0)
             }
             Direction::Down => {
                 head_pos.y -= 1;
+                head_transform.rotation = Quat::from_rotation_z(PI as f32)
             }
         };
         if head_pos.x < 0
@@ -339,12 +350,14 @@ fn food_spawner(
     }
     commands
         .spawn_bundle(SpriteBundle {
+            sprite: Sprite::new(Vec2::new(16.0, 16.0)),
             material: materials.food_material.clone(),
+            transform: Transform::from_rotation(Quat::from_rotation_z(random::<f32>())),
             ..Default::default()
         })
         .insert(Food)
         .insert(get_empty_pos(blockers.iter().collect()))
-        .insert(Size::square(0.55));
+        .insert(Size::square(1.0));
 }
 
 fn size_scaling(windows: Res<Windows>, mut q: Query<(&Size, &mut Sprite)>) {
